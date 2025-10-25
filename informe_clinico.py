@@ -326,13 +326,18 @@ def _predict_windows(model, batch_3chw: torch.Tensor) -> np.ndarray:
     device = st.session_state.DEVICE
     probs_all = []
     with torch.no_grad():
-        B = 64
+        B = 32  # baja un poco el batch size
         for i in range(0, batch_3chw.shape[0], B):
             x = batch_3chw[i:i+B].to(device, dtype=torch.float32)
-            logits = model(x)
+            try:
+                logits = model(x)
+            except Exception as e:
+                st.warning(f"Error en el forward del modelo: {e}")
+                continue
             probs = F.softmax(logits, dim=1).cpu().numpy()
             probs_all.append(probs)
-    return np.concatenate(probs_all, axis=0)
+    return np.concatenate(probs_all, axis=0) if probs_all else np.zeros((1, len(st.session_state.CLASS_NAMES)))
+
 
 # ===============================================================
 # CLASE PRINCIPAL STREAMLIT
