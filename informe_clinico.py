@@ -412,6 +412,15 @@ class InformeClinico:
 
                 sig, fs, base_temp, has_ann = load_record_from_wfdb_zip(io.BytesIO(zip_bytes))
 
+                # === Protección para modo demo (Streamlit Cloud) ===
+                import os
+                IS_PUBLIC = os.getenv("STREAMLIT_RUNTIME") == "cloud"
+                MAX_DEMO_SECONDS = 15  # límite en demo pública
+                if IS_PUBLIC:
+                    max_samples = int(MAX_DEMO_SECONDS * fs)
+                    if len(sig_1d) > max_samples:
+                        sig_1d = sig_1d[:max_samples]
+
                 try:
                     sig, fs, _warns = validate_and_prepare_signal(sig, fs, fs_target=int(st.session_state.get("FS_TARGET", FS_TARGET)))
                     for w in _warns:
