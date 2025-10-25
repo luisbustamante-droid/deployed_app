@@ -253,7 +253,7 @@ def _ensure_model_loaded():
         dropout_rate=0.3
     )
     weights_path = st.session_state.WEIGHTS_PATH
-    sd = torch.load(weights_path, map_location="cpu")
+    sd = torch.load(weights_path, map_location="cpu", weights_only=True)
     if isinstance(sd, dict) and "state_dict" in sd:
         sd = sd["state_dict"]
     new_sd = {}
