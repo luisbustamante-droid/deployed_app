@@ -1,12 +1,12 @@
+import streamlit as st
+from collections import Counter
+import zipfile, tempfile, io
 import os
+
 import torch
 torch.set_default_device("cpu")
 torch.set_num_threads(2)
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
-import streamlit as st
-from collections import Counter
-import zipfile, tempfile, io, os
 
 # <<< NUEVO: imports mínimos para meta y (opcional) splits
 import json
