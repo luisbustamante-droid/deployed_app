@@ -77,6 +77,17 @@ def signal_to_spec_img(sig_1d: np.ndarray, fs: float, cfg: SpecCfg) -> np.ndarra
     # Clampeo preventivo tras resample: evita valores extremos
     sig_1d = np.clip(sig_1d, -10.0, 10.0)
 
+    # === Protección de rendimiento: limitar longitud de señal en entornos públicos ===
+    import os
+    IS_PUBLIC = os.getenv("STREAMLIT_RUNTIME") == "cloud"
+    MAX_DEMO_SECONDS = 15  # ajusta según tu preferencia
+
+    if IS_PUBLIC:
+        max_samples = int(MAX_DEMO_SECONDS * fs)
+        if len(sig_1d) > max_samples:
+            sig_1d = sig_1d[:max_samples]
+
+
     # Si la señal es casi constante, evita división 0/0 más adelante
     if np.std(sig_1d) < 1e-6:
         return np.zeros((cfg.out_size, cfg.out_size), dtype=np.uint8)
