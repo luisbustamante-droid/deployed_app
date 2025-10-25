@@ -242,34 +242,41 @@ def _try_load_test_records_from_splits(pkl_path="assets/df_windows_mitdb_svdb_sp
 
 # <<< NUEVO: helpers de inferencia
 def _ensure_model_loaded():
+    device = torch.device("cpu")
+    st.session_state.DEVICE = device
+
     if "MODEL" in st.session_state and st.session_state.MODEL is not None:
         return
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    st.session_state.DEVICE = device
-    model = build_model(
-        arch=st.session_state.MODEL_ARCH,
-        num_classes=int(st.session_state.NUM_CLASSES),
-        pretrained=False,
-        dropout_rate=0.3
-    )
-    weights_path = st.session_state.WEIGHTS_PATH
-    sd = torch.load(weights_path, map_location="cpu", weights_only=True)
-    if isinstance(sd, dict) and "state_dict" in sd:
-        sd = sd["state_dict"]
-    new_sd = {}
-    for k, v in sd.items():
-        nk = k[7:] if k.startswith("module.") else k
-        new_sd[nk] = v
-    model.load_state_dict(new_sd, strict=False)
-    missing, unexpected = model.load_state_dict(new_sd, strict=False)
-    if missing:
-        st.warning(f"Pesos faltantes en el modelo: {len(missing)} capas.")
-    if unexpected:
-        st.warning(f"Pesos inesperados: {len(unexpected)} capas.")
 
+    arch = st.session_state.MODEL_ARCH
+    num_classes = int(st.session_state.NUM_CLASSES)
+    weights_path = st.session_state.WEIGHTS_PATH
+
+    if not os.path.exists(weights_path):
+        st.error(f"No se encontró el archivo de pesos: {weights_path}")
+        st.stop()
+
+    # Construcción
+    model = build_model(arch=arch, num_classes=num_classes, pretrained=False)
+
+    # Carga robusta
+    try:
+        sd = torch.load(weights_path, map_location="cpu")
+        if isinstance(sd, dict) and "state_dict" in sd:
+            sd = sd["state_dict"]
+        new_sd = {k[7:] if k.startswith("module.") else k: v for k, v in sd.items()}
+        missing, unexpected = model.load_state_dict(new_sd, strict=False)
+        if missing:
+            st.warning(f"Capas faltantes al cargar pesos: {len(missing)}")
+        if unexpected:
+            st.warning(f"Capas inesperadas en pesos: {len(unexpected)}")
+    except Exception as e:
+        st.error(f"No se pudieron cargar los pesos: {e}")
+        st.stop()
 
     model.eval().to(device)
     st.session_state.MODEL = model
+
 
 def _windows_to_batch_spectrograms(windows: np.ndarray, fs: int, spec_cfg: SpecCfg) -> torch.Tensor:
     """
