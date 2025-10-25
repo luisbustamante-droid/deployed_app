@@ -194,14 +194,6 @@ def validate_and_prepare_signal(
     fs_target: int = DEFAULT_FS_TARGET,
     min_seconds: float = 5.0
 ) -> tuple[np.ndarray, int, list[str]]:
-    """
-    - Verifica Fs [50..2000]
-    - Interpola NaNs
-    - Chequea duración mínima
-    - Descarta señal constante
-    - Remuestrea a fs_target
-    Devuelve: (sig_ok[N,1], fs_target, warnings)
-    """
     issues: List[str] = []
 
     if sig is None:
@@ -210,36 +202,55 @@ def validate_and_prepare_signal(
     if sig.ndim == 1:
         sig = sig[:, None]
     if sig.ndim != 2 or sig.shape[1] < 1:
-        raise ValueError(f"Se esperaba una matriz [N, C] con al menos 1 canal; llegó {sig.shape}.")
+        raise ValueError(f"Se esperaba [N, C] con al menos 1 canal; llegó {sig.shape}.")
 
+    # Selección automática de canal más útil
     if sig.shape[1] > 1:
-        vars_ch = sig.var(axis=0)
-        ch = int(np.argmax(vars_ch))
+        ch = int(np.argmax(sig.var(axis=0)))
         sig = sig[:, [ch]]
 
-    if not (isinstance(fs, (int, np.integer)) or (isinstance(fs, float) and float(fs).is_integer())):
-        raise ValueError(f"Frecuencia de muestreo inválida: {fs}")
+    # Validar frecuencia
     fs = int(fs)
     if fs < 50 or fs > 2000:
-        raise ValueError(f"Fs fuera de rango esperado [50..2000] Hz: {fs}")
+        raise ValueError(f"Fs fuera de rango [50..2000] Hz: {fs}")
 
+    # Interpolar NaNs
     x = sig[:, 0].astype(np.float32)
-    bad = ~np.isfinite(x)
-    if bad.any():
-        issues.append(f"Se interpolaron {int(bad.sum())} muestras no finitas (NaN/Inf).")
-        x = _interp_nans_1d(x)
+    if not np.isfinite(x).all():
+        mask = ~np.isfinite(x)
+        issues.append(f"Se interpolaron {mask.sum()} muestras no finitas.")
+        x = np.interp(np.arange(len(x)), np.arange(len(x))[~mask], x[~mask])
     sig = x[:, None]
 
-    dur = len(sig) / fs if fs > 0 else 0.0
+    # Duración mínima
+    dur = len(sig) / fs
     if dur < min_seconds:
-        raise ValueError(f"La señal es demasiado corta ({dur:.2f}s). Mínimo requerido: {min_seconds:.1f}s.")
+        raise ValueError(f"Señal muy corta ({dur:.2f}s). Mínimo {min_seconds:.1f}s.")
 
-    if float(np.std(sig)) < 1e-6:
-        raise ValueError("La señal parece constante (varianza ~ 0).")
+    # Señal constante
+    if np.std(sig) < 1e-6:
+        raise ValueError("La señal parece constante (varianza ~0).")
 
-    sig = _resample_to_target(sig, fs_src=fs, fs_target=fs_target)
-    fs = fs_target
-    return sig.astype(np.float32, copy=False), fs, issues
+    # === Remuestreo robusto ===
+    try:
+        sig = resample_poly(sig, fs_target, fs, axis=0).astype(np.float32)
+        fs = fs_target
+    except Exception as e:
+        issues.append(f"Error al remuestrear: {e}")
+        fs = fs  # mantener original si falla
+
+    # === Clampeo preventivo ===
+    sig = np.clip(sig, -10.0, 10.0)
+
+    # === Limitador de longitud ===
+    max_seconds = 30.0
+    max_samples = int(max_seconds * fs)
+    if len(sig) > max_samples:
+        sig = sig[:max_samples]
+        issues.append(f"Se truncó la señal a {max_seconds}s para evitar sobrecarga.")
+
+    return sig, fs, issues
+
 
 # ---------------------------------------------------------------------
 # Validador de estructura de ZIP WFDB
