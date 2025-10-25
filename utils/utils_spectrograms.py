@@ -74,28 +74,58 @@ def signal_to_spec_img(sig_1d: np.ndarray, fs: float, cfg: SpecCfg) -> np.ndarra
     if not np.isfinite(sig_1d).all():
         sig_1d = np.nan_to_num(sig_1d, nan=0.0, posinf=0.0, neginf=0.0)
 
+    # Clampeo preventivo tras resample: evita valores extremos
+    sig_1d = np.clip(sig_1d, -10.0, 10.0)
+
+    # Si la señal es casi constante, evita división 0/0 más adelante
+    if np.std(sig_1d) < 1e-6:
+        return np.zeros((cfg.out_size, cfg.out_size), dtype=np.uint8)
+
     nfft_eff = _safe_nfft(cfg.nperseg, cfg.nfft)
     nover = int(min(cfg.noverlap, cfg.nperseg - 1))
 
-    f, t, Z = stft(sig_1d, fs=fs, window=cfg.window,
-                   nperseg=cfg.nperseg, noverlap=nover,
-                   nfft=nfft_eff, padded=False, boundary=None)
+    # STFT robusta
+    try:
+        f, t, Z = stft(sig_1d, fs=fs, window=cfg.window,
+                       nperseg=cfg.nperseg, noverlap=nover,
+                       nfft=nfft_eff, padded=False, boundary=None)
+    except Exception:
+        # STFT puede romperse en señales degeneradas
+        return np.zeros((cfg.out_size, cfg.out_size), dtype=np.uint8)
 
     mag = np.abs(Z)
     mag = np.nan_to_num(mag, nan=0.0, posinf=0.0, neginf=0.0)
 
+    if mag.size == 0 or not np.isfinite(mag).any():
+        return np.zeros((cfg.out_size, cfg.out_size), dtype=np.uint8)
+
+    # Filtrado de frecuencia
     if cfg.fmax is not None and f.size > 0:
         mask = (f <= cfg.fmax)
         if not np.any(mask):
-            mask = np.ones_like(f, dtype=bool)
+            mask[:] = True
         mag = mag[mask, :]
 
-    img = np.log1p(mag + cfg.eps)
+    # Log-escala y normalización
+    img = np.log1p(np.maximum(mag, 0) + cfg.eps)
     img = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Normalización segura
     img = _normalize_img(img, cfg.eps, cfg.normalize, cfg.clip_percentiles)
-    img = (img * 255.0).astype(np.uint8)
+    if not np.isfinite(img).all() or img.max() == img.min():
+        img[:] = 0.0
+
+    img = (img * 255.0).clip(0, 255).astype(np.uint8)
 
     in_h, in_w = img.shape
+    if in_h == 0 or in_w == 0:
+        return np.zeros((cfg.out_size, cfg.out_size), dtype=np.uint8)
+
     inter = cv2.INTER_AREA if cfg.out_size < min(in_h, in_w) else cv2.INTER_CUBIC
-    img = cv2.resize(img, (cfg.out_size, cfg.out_size), interpolation=inter)
+    try:
+        img = cv2.resize(img, (cfg.out_size, cfg.out_size), interpolation=inter)
+    except Exception:
+        # Fallback en caso de NaN oculto
+        img = np.zeros((cfg.out_size, cfg.out_size), dtype=np.uint8)
+
     return img
