@@ -1,3 +1,7 @@
+import logging, sys
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+print("=== Iniciando app.py ===")
+
 import streamlit as st
 from pagina_inicial import show_pagina_inicial
 import os
