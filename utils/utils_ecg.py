@@ -73,7 +73,7 @@ def extract_windows_from_rpeaks(signal: np.ndarray, fs: int, rpeaks: np.ndarray,
         start = int(r) - half
         xw = _slice_with_padding(signal, start, win_len, cfg.pad_mode)
         if cfg.zscore_per_window:
-            mu, sd = np.mean(xw), np.std(xw) + 1e-6
+            mu, sd = np.mean(xw), np.std(xw) + 1e-3
             xw = (xw - mu) / sd
         windows.append(xw.astype(np.float32, copy=False))
     return np.asarray(windows, dtype=np.float32)
