@@ -1,7 +1,22 @@
 import numpy as np
-import cv2
+# import cv2
 from dataclasses import dataclass
 from scipy.signal import stft
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+except OSError as e:
+    # Esto captura específicamente el error de libGL.so.1 faltante
+    import types
+    print("⚠️ OpenCV desactivado (no se encontró libGL). Algunas funciones de espectrogramas se omitirán.")
+    cv2 = types.SimpleNamespace(
+        imread=lambda *a, **kw: None,
+        resize=lambda *a, **kw: None,
+        imwrite=lambda *a, **kw: None,
+        cvtColor=lambda *a, **kw: None
+    )
+
 
 @dataclass
 class SpecCfg:
