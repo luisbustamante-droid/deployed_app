@@ -3,7 +3,16 @@ logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 print("=== Iniciando app.py ===")
 
 import streamlit as st
-from pagina_inicial import show_pagina_inicial
+try:
+    from pagina_inicial import show_pagina_inicial
+    print("Import de pagina_inicial OK")
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+    import streamlit as st
+    st.error(f"Error al importar pagina_inicial: {e}")
+    raise e
+
 import os
 os.environ["STREAMLIT_WATCHDOG_TYPE"] = "polling"
 os.environ["STREAMLIT_WATCHDOG"] = "false"
